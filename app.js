@@ -1053,22 +1053,37 @@ function fitGalleryCards() {
   if (!grid) return;
   const cards = $$('.art-card', grid);
   if (!cards.length) return;
-  // Restaura largura antes de calcular as colunas após redimensionar a janela.
-  cards.forEach(card => { card.style.width = ''; });
+
+  // Todas as colunas têm a mesma largura real, em vez de tracks 1fr
+  // espalhados pela tela com cards menores centralizados em cada track.
+  const mobile = window.innerWidth < 900;
+  const narrow = window.innerWidth < 741;
+  const portrait = window.innerHeight > window.innerWidth * 1.25;
+  const count = cards.length;
+  let columns;
+  if (mobile || portrait) columns = count <= 2 ? count : count <= 6 ? 2 : 3;
+  else columns = count <= 3 ? count : count <= 4 ? 2 : count <= 6 ? 3 : count <= 8 ? 4 : 5;
+
+  const rows = Math.ceil(count / columns);
+  const crowded = mobile && count >= 7;
+  grid.classList.toggle('gallery-compact', crowded);
+  const gap = crowded ? 7 : narrow ? 8 : 12;
+  const footer = crowded ? 28 : narrow ? 36 : 42;
+  const edges = 4;
   const style = getComputedStyle(grid);
-  const columns = style.gridTemplateColumns.split(' ').filter(Boolean).length || 1;
-  const rows = Math.ceil(cards.length / columns);
-  const colGap = parseFloat(style.columnGap) || 0;
-  const rowGap = parseFloat(style.rowGap) || 0;
-  const w = Math.max(1, (grid.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0) - colGap * (columns - 1)) / columns);
-  const h = Math.max(1, (grid.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0) - rowGap * (rows - 1)) / rows);
-  cards.forEach(card => {
-    const footer = card.querySelector('.art-info')?.getBoundingClientRect().height || 30;
-    const cardBorders = 4;
-    // 3px de reserva para arredondamentos e arredondamento de subpixels.
-    const fitW = Math.max(30, (h - footer - cardBorders - 3) * 16 / 9 + cardBorders);
-    card.style.width = `${Math.min(w, fitW)}px`;
-  });
+  const horizontalPadding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+  const verticalPadding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+  const usableWidth = Math.max(1, grid.clientWidth - horizontalPadding);
+  const usableHeight = Math.max(1, grid.clientHeight - verticalPadding);
+  const maxByWidth = (usableWidth - gap * (columns - 1)) / columns;
+  // Impede rolagem até com 10 jogadores, preservando 16:9 + rodapé fixo.
+  const maxByHeight = ((usableHeight - gap * (rows - 1)) / rows - footer - edges) * 16 / 9 + edges;
+  const maxCard = mobile ? 420 : 440;
+  const width = Math.max(34, Math.floor(Math.min(maxByWidth, maxByHeight, maxCard)));
+  grid.style.setProperty('--gallery-cols', String(columns));
+  grid.style.setProperty('--gallery-gap', `${gap}px`);
+  grid.style.setProperty('--gallery-card-width', `${width}px`);
+  cards.forEach(card => { card.style.width = ''; });
 }
 
 function bindArtExpansion() {
@@ -1086,7 +1101,7 @@ function renderGallery() {
       const liked = selectedReaction(a.id, 'like');
       const disliked = selectedReaction(a.id, 'dislike');
       const playerName = escapeHTML(a.player.name);
-      return `<div class="art-card ${liked ? 'voted' : disliked ? 'disliked' : ''}" style="--stagger:${i}" data-player="${escapeHTML(a.id)}"><button type="button" class="art-media" data-expand-index="${i}" aria-label="Ampliar desenho de ${playerName}"><img src="${a.image}" alt="Desenho de ${playerName}"/><span class="art-expand-badge" aria-hidden="true">${uiIcon('expand')}</span></button><div class="art-info"><span class="art-name">${playerName}${owned ? ' <strong class="self-tag">você</strong>' : ''}</span>${owned ? '<span class="own-art-label">Seu desenho</span>' : `<div class="vote-actions" role="group" aria-label="Avaliar desenho de ${playerName}"><button type="button" class="vote-action vote-like ${liked ? 'selected' : ''}" data-reaction="like" aria-pressed="${liked}" aria-label="Gostei do desenho de ${playerName}" title="Gostei">${uiIcon('thumbUp')}<span>Gostei</span></button><button type="button" class="vote-action vote-dislike ${disliked ? 'selected' : ''}" data-reaction="dislike" aria-pressed="${disliked}" aria-label="Não gostei do desenho de ${playerName}" title="Não gostei">${uiIcon('thumbDown')}<span>Dislike</span></button></div>`}</div></div>`;
+      return `<div class="art-card ${liked ? 'voted' : disliked ? 'disliked' : ''}" style="--stagger:${i}" data-player="${escapeHTML(a.id)}"><button type="button" class="art-media" data-expand-index="${i}" aria-label="Ampliar desenho de ${playerName}"><img src="${a.image}" alt="Desenho de ${playerName}"/><span class="art-expand-badge" aria-hidden="true">${uiIcon('expand')}</span></button><div class="art-info"><span class="art-name">${playerName}${owned ? ' <strong class="self-tag">você</strong>' : ''}</span>${owned ? '' : `<div class="vote-actions" role="group" aria-label="Avaliar desenho de ${playerName}"><button type="button" class="vote-action vote-like ${liked ? 'selected' : ''}" data-reaction="like" aria-pressed="${liked}" aria-label="Gostei do desenho de ${playerName}" title="Gostei">${uiIcon('thumbUp')}<span>Gostei</span></button><button type="button" class="vote-action vote-dislike ${disliked ? 'selected' : ''}" data-reaction="dislike" aria-pressed="${disliked}" aria-label="Não gostei do desenho de ${playerName}" title="Não gostei">${uiIcon('thumbDown')}<span>Dislike</span></button></div>`}</div></div>`;
     }).join('')}</div>
     <div class="bottom-actions"><span class="status-note" id="voteHelp">${state.localVote ? 'Você pode trocar ou retirar sua avaliação até o tempo acabar.' : 'Escolha uma avaliação. É possível mudar ou cancelar.'}</span></div></section>`;
   $$('.gallery-grid .vote-action').forEach(btn => btn.onclick = () => castVote(btn.closest('.art-card')?.dataset.player, btn.dataset.reaction));

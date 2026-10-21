@@ -1994,3 +1994,78 @@ button.art-card:disabled { opacity: 1; cursor: default; }
   .lightbox-top { height: 52px; min-height: 52px; }
   .lightbox-foot { height: 76px; min-height: 76px; }
 }
+
+
+/* Grade responsiva de cards: dimensões idênticas e espaçamento constante.
+   A largura das colunas vem de fitGalleryCards(), sem tracks flexíveis que
+   criam lacunas enormes nem linhas de altura distribuída pela tela. */
+.gallery-mode .gallery-grid,
+.results-mode .gallery-grid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(var(--gallery-cols, 2), var(--gallery-card-width, 200px)) !important;
+  grid-auto-rows: max-content !important;
+  justify-content: center !important;
+  justify-items: stretch !important;
+  align-content: start !important;
+  align-items: start !important;
+  gap: var(--gallery-gap, 12px) !important;
+  overflow: hidden !important;
+}
+.gallery-mode .gallery-grid > .art-card,
+.results-mode .gallery-grid > .art-card {
+  width: 100% !important;
+  height: auto !important;
+  min-width: 0;
+  align-self: start !important;
+  box-sizing: border-box;
+}
+.gallery-mode .gallery-grid .art-media,
+.results-mode .gallery-grid .art-media {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-height: none;
+  flex: 0 0 auto;
+}
+.gallery-mode .gallery-grid .art-info,
+.results-mode .gallery-grid .art-info {
+  box-sizing: border-box;
+  width: 100%;
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  flex: 0 0 42px;
+  overflow: hidden;
+}
+.gallery-mode .gallery-grid .vote-actions,
+.results-mode .gallery-grid .result-vote-totals { flex-shrink: 0; }
+@media (max-width: 740px) {
+  .gallery-mode .gallery-grid .art-info,
+  .results-mode .gallery-grid .art-info {
+    height: 36px; min-height: 36px; max-height: 36px; flex-basis: 36px;
+    padding: 4px 6px;
+  }
+}
+@media (max-width: 899px) {
+  .gallery-mode .gallery-grid.gallery-compact .art-info,
+  .results-mode .gallery-grid.gallery-compact .art-info {
+    height: 28px; min-height: 28px; max-height: 28px; flex-basis: 28px;
+    padding: 2px 4px;
+  }
+  .gallery-mode .gallery-grid.gallery-compact .vote-actions { gap: 3px; }
+  .gallery-mode .gallery-grid.gallery-compact .vote-action {
+    min-height: 22px; height: 22px; width: 22px; padding: 3px;
+  }
+  .gallery-mode .gallery-grid.gallery-compact .vote-action .ui-icon { width: 13px; height: 13px; }
+  .gallery-mode .gallery-grid.gallery-compact .art-name,
+  .results-mode .gallery-grid.gallery-compact .art-name { font-size: 10px; }
+}
+
+/* Em desktop, a galeria ocupa a área útil inteira da rodada. */
+@media (min-width: 900px) and (min-height: 570px) {
+  .gallery-mode main > .main-panel,
+  .results-mode main > .main-panel {
+    flex: 1 1 0;
+  }
+}
