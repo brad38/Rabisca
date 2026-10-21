@@ -866,9 +866,18 @@ function floodFill(ctx, x, y, color) {
   ctx.putImageData(image, 0, 0);
 }
 
+let canvasPixelScale = 1;
 function initCanvas() {
   const canvas = $('#drawCanvas');
   canvas.style.touchAction = 'none';
+  // O canvas precisa ter a mesma proporção do painel que o jogador vê.
+  // Antes, o buffer fixo de 900x520 achatava os desenhos feitos em modo retrato.
+  const bounds = canvas.getBoundingClientRect();
+  const visibleWidth = Math.max(1, bounds.width);
+  const visibleHeight = Math.max(1, bounds.height);
+  canvasPixelScale = Math.max(1, Math.min(window.devicePixelRatio || 1, 2, 1600 / visibleWidth, 1600 / visibleHeight));
+  canvas.width = Math.max(1, Math.round(visibleWidth * canvasPixelScale));
+  canvas.height = Math.max(1, Math.round(visibleHeight * canvasPixelScale));
   redrawCanvas();
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const getPos = ev => { const r = canvas.getBoundingClientRect(); return { x: Math.max(0, Math.min(canvas.width, (ev.clientX - r.left) * canvas.width / r.width)), y: Math.max(0, Math.min(canvas.height, (ev.clientY - r.top) * canvas.height / r.height)) }; };
@@ -879,8 +888,8 @@ function initCanvas() {
     ev.preventDefault(); canvas.setPointerCapture(ev.pointerId);
     const pt = getPos(ev);
     if (paintTool === 'fill') { pushDrawAction({ kind: 'fill', ...pt, color: paintColor }); redrawCanvas(); return; }
-    if (paintTool === 'shapes') activeStroke = { kind: 'shape', shape: paintShape, x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y, color: paintColor, size: paintSize };
-    else activeStroke = { kind: 'stroke', color: paintTool === 'eraser' ? '#ffffff' : paintColor, size: paintTool === 'eraser' ? paintSize * 2.5 : paintSize, points: [pt] };
+    if (paintTool === 'shapes') activeStroke = { kind: 'shape', shape: paintShape, x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y, color: paintColor, size: paintSize * canvasPixelScale };
+    else activeStroke = { kind: 'stroke', color: paintTool === 'eraser' ? '#ffffff' : paintColor, size: (paintTool === 'eraser' ? paintSize * 2.5 : paintSize) * canvasPixelScale, points: [pt] };
     if (activeStroke.kind === 'stroke') drawStroke(ctx, activeStroke);
   };
   canvas.onpointermove = ev => {
