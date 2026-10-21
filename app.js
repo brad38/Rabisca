@@ -90,7 +90,8 @@ const UI_ICONS = {
   home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
   refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   pipette: '<path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/>',
-  close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+  close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  expand: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>'
 };
 
 function uiIcon(name, extraClass = '') {
@@ -126,6 +127,7 @@ let timerInterval;
 /* Estado do Seletor de Cores Customizado (HSV) */
 let pickerHSV = { h: 255, s: 68, v: 91 };
 let colorPopoverOpen = false;
+let lightboxIndex = -1;
 
 const state = {
   phase: 'home', selfId: null, nickname: '', room: '', isHost: false, demo: false,
@@ -212,6 +214,7 @@ function resetRoom({ name, room, demo = false, isHost = false, id }) {
   state.submittedCount = 0;
   localDrawn = false; drawnPaths = []; undonePaths = []; lastScreen = null;
   hostFinishing = false; endedTimer = false; roundUsedTopics.clear();
+  closeLightbox();
 }
 
 function closeTransport() {
@@ -246,6 +249,7 @@ function showHome() {
   state.phase = 'home'; state.isHost = false; state.demo = false; lastScreen = null;
   paintColor = COLORS[0]; erasing = false; paintTool = 'pencil';
   toggleColorPopover(false);
+  closeLightbox();
   render();
 }
 
@@ -257,6 +261,7 @@ function render() {
   if (screen === lastScreen) { updateLiveUI(); return; }
   lastScreen = screen;
   if (screen !== 'drawing') toggleColorPopover(false);
+  if (screen !== 'gallery' && screen !== 'results') closeLightbox();
   const playing = screen !== 'home' && screen !== 'connecting';
   headerInfo.textContent = playing ? `Sala de ${state.isHost ? state.nickname : (state.players[0]?.name || 'amigo')}` : 'Um tema, mil rabiscos';
   const homeButton = $('#homeButton');
@@ -964,6 +969,114 @@ function selectedReaction(target, kind) {
   return !!(state.localVote && state.localVote.target === target && state.localVote.kind === kind);
 }
 
+
+/* Visualizador de desenhos. Lê o estado atual e mantém reações positivas/negativas. */
+function lightboxItems() {
+  if (state.phase === 'gallery') return sortedArt().map(a => ({
+    id: a.id, image: a.image, name: a.player.name
+  }));
+  if (state.phase === 'results') return (state.results.length ? state.results : rankResults()).map(r => ({
+    id: r.id, image: r.image, name: r.name, likes: r.likes, dislikes: r.dislikes
+  }));
+  return [];
+}
+
+function openLightbox(index) {
+  const items = lightboxItems();
+  const modal = $('#artLightbox');
+  if (!items.length || !modal) return;
+  lightboxIndex = ((index % items.length) + items.length) % items.length;
+  updateLightboxUI();
+  if (!modal.open) modal.showModal();
+  playSound('click');
+}
+
+function closeLightbox() {
+  const modal = $('#artLightbox');
+  if (modal?.open) modal.close();
+  lightboxIndex = -1;
+}
+
+function stepLightbox(delta) {
+  const items = lightboxItems();
+  if (lightboxIndex < 0 || items.length <= 1) return;
+  lightboxIndex = (lightboxIndex + delta + items.length) % items.length;
+  updateLightboxUI();
+  playSound('click');
+}
+
+function updateLightboxUI() {
+  const modal = $('#artLightbox');
+  if (!modal?.open && lightboxIndex < 0) return;
+  const items = lightboxItems();
+  if (!items.length) { closeLightbox(); return; }
+  if (lightboxIndex < 0 || lightboxIndex >= items.length) lightboxIndex = 0;
+  const item = items[lightboxIndex];
+  const owned = item.id === state.selfId;
+  const img = $('#lightboxImage');
+  if (img && img.src !== item.image) img.src = item.image;
+  if (img) img.alt = `Desenho de ${item.name}`;
+  $('#lightboxCounter').textContent = `${lightboxIndex + 1} de ${items.length}`;
+  $('#lightboxAuthor').textContent = item.name + (owned ? ' (você)' : '');
+  $('#lightboxTheme').textContent = state.theme || '';
+  $('#lightboxPrev').disabled = items.length <= 1;
+  $('#lightboxNext').disabled = items.length <= 1;
+  const status = $('#lightboxStatus');
+  const actions = $('#lightboxActions');
+  actions.replaceChildren();
+  if (state.phase === 'gallery') {
+    const locked = Date.now() >= state.voteDeadline;
+    status.textContent = owned ? 'Seu desenho' : locked ? 'Votação encerrada' : 'Avalie este desenho';
+    if (!owned) {
+      for (const [kind, text, icon] of [['like', 'Gostei', 'thumbUp'], ['dislike', 'Dislike', 'thumbDown']]) {
+        const active = selectedReaction(item.id, kind);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `vote-action lightbox-reaction vote-${kind} ${active ? 'selected' : ''}`;
+        button.setAttribute('aria-pressed', String(active));
+        button.setAttribute('aria-label', active ? `Retirar ${text}` : `${text} do desenho de ${item.name}`);
+        button.disabled = locked;
+        button.innerHTML = `${uiIcon(icon)}<span>${text}</span>`;
+        button.addEventListener('click', () => { castVote(item.id, kind); updateLightboxUI(); });
+        actions.appendChild(button);
+      }
+    }
+  } else {
+    status.textContent = `${item.likes || 0} gostei  ${item.dislikes || 0} dislikes`;
+  }
+}
+
+/* Ajusta as miniaturas para a altura disponível sem deformar o retângulo 16:9.
+   Isso evita corte quando há até 10 jogadores no desktop ou no celular. */
+function fitGalleryCards() {
+  const grid = $('.gallery-grid');
+  if (!grid) return;
+  const cards = $$('.art-card', grid);
+  if (!cards.length) return;
+  // Restaura largura antes de calcular as colunas após redimensionar a janela.
+  cards.forEach(card => { card.style.width = ''; });
+  const style = getComputedStyle(grid);
+  const columns = style.gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+  const rows = Math.ceil(cards.length / columns);
+  const colGap = parseFloat(style.columnGap) || 0;
+  const rowGap = parseFloat(style.rowGap) || 0;
+  const w = Math.max(1, (grid.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0) - colGap * (columns - 1)) / columns);
+  const h = Math.max(1, (grid.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0) - rowGap * (rows - 1)) / rows);
+  cards.forEach(card => {
+    const footer = card.querySelector('.art-info')?.getBoundingClientRect().height || 30;
+    const cardBorders = 4;
+    // 3px de reserva para arredondamentos e arredondamento de subpixels.
+    const fitW = Math.max(30, (h - footer - cardBorders - 3) * 16 / 9 + cardBorders);
+    card.style.width = `${Math.min(w, fitW)}px`;
+  });
+}
+
+function bindArtExpansion() {
+  $$('.gallery-grid .art-media').forEach(button => {
+    button.addEventListener('click', () => openLightbox(Number(button.dataset.expandIndex)));
+  });
+}
+
 function renderGallery() {
   const arts = sortedArt();
   app.innerHTML = `<section class="card main-panel animate-screen">${demoBanner()}<div class="panel-top"><div><div class="card-kicker">${roundLabel()}</div><h1 class="panel-title">A galeria está aberta!</h1><p class="panel-desc">O tema era <strong>${escapeHTML(state.theme)}</strong>. Curta ou dê dislike em um desenho. Não é possível avaliar o seu.</p></div><div class="room-code"><div><span class="room-code-label">AVALIAÇÕES</span><div class="room-code-value" id="votedCount">${state.votedCount} de ${state.demo ? 1 : connectedPlayers().length}</div></div></div></div>
@@ -973,10 +1086,12 @@ function renderGallery() {
       const liked = selectedReaction(a.id, 'like');
       const disliked = selectedReaction(a.id, 'dislike');
       const playerName = escapeHTML(a.player.name);
-      return `<div class="art-card ${liked ? 'voted' : disliked ? 'disliked' : ''}" style="--stagger:${i}" data-player="${escapeHTML(a.id)}"><img src="${a.image}" alt="Desenho de ${playerName}"/><div class="art-info"><span class="art-name">${playerName}${owned ? ' <strong class="self-tag">você</strong>' : ''}</span>${owned ? '<span class="own-art-label">Seu desenho</span>' : `<div class="vote-actions" role="group" aria-label="Avaliar desenho de ${playerName}"><button type="button" class="vote-action vote-like ${liked ? 'selected' : ''}" data-reaction="like" aria-pressed="${liked}" aria-label="Gostei do desenho de ${playerName}" title="Gostei">${uiIcon('thumbUp')}<span>Gostei</span></button><button type="button" class="vote-action vote-dislike ${disliked ? 'selected' : ''}" data-reaction="dislike" aria-pressed="${disliked}" aria-label="Não gostei do desenho de ${playerName}" title="Não gostei">${uiIcon('thumbDown')}<span>Dislike</span></button></div>`}</div></div>`;
+      return `<div class="art-card ${liked ? 'voted' : disliked ? 'disliked' : ''}" style="--stagger:${i}" data-player="${escapeHTML(a.id)}"><button type="button" class="art-media" data-expand-index="${i}" aria-label="Ampliar desenho de ${playerName}"><img src="${a.image}" alt="Desenho de ${playerName}"/><span class="art-expand-badge" aria-hidden="true">${uiIcon('expand')}</span></button><div class="art-info"><span class="art-name">${playerName}${owned ? ' <strong class="self-tag">você</strong>' : ''}</span>${owned ? '<span class="own-art-label">Seu desenho</span>' : `<div class="vote-actions" role="group" aria-label="Avaliar desenho de ${playerName}"><button type="button" class="vote-action vote-like ${liked ? 'selected' : ''}" data-reaction="like" aria-pressed="${liked}" aria-label="Gostei do desenho de ${playerName}" title="Gostei">${uiIcon('thumbUp')}<span>Gostei</span></button><button type="button" class="vote-action vote-dislike ${disliked ? 'selected' : ''}" data-reaction="dislike" aria-pressed="${disliked}" aria-label="Não gostei do desenho de ${playerName}" title="Não gostei">${uiIcon('thumbDown')}<span>Dislike</span></button></div>`}</div></div>`;
     }).join('')}</div>
     <div class="bottom-actions"><span class="status-note" id="voteHelp">${state.localVote ? 'Você pode trocar ou retirar sua avaliação até o tempo acabar.' : 'Escolha uma avaliação. É possível mudar ou cancelar.'}</span></div></section>`;
   $$('.gallery-grid .vote-action').forEach(btn => btn.onclick = () => castVote(btn.closest('.art-card')?.dataset.player, btn.dataset.reaction));
+  bindArtExpansion();
+  fitGalleryCards();
 }
 
 /* Atualiza apenas os botões de avaliação sem remontar a galeria e reiniciar animações. */
@@ -1021,9 +1136,11 @@ function renderResults() {
   app.innerHTML = `<section class="card main-panel animate-screen">${demoBanner()}<div class="panel-top"><div><div class="card-kicker">${roundLabel()}</div><h1 class="panel-title">${final ? 'Fim de jogo!' : 'Que obras de arte!'}</h1><p class="panel-desc">${final ? 'Hora de conferir a classificação final.' : 'Confira os resultados desta rodada.'}</p></div></div>
     <div class="result-banner"><div><div class="result-label">${final ? 'Partida concluída' : 'Melhor avaliado da rodada'}</div><div class="winner-name">${escapeHTML(final ? scoresSorted[0]?.name || 'Sem pontuação' : winningDrawing?.name || 'Sem vencedor nesta rodada')}</div><p class="result-sub">${final ? `${scoresSorted[0]?.score || 0} pontos no total` : `${leader?.likes || 0} gostei e ${leader?.dislikes || 0} dislikes`}</p></div><svg class="winner-svg" viewBox="0 0 90 90" fill="none" aria-hidden="true"><path d="M24 16h42v13c0 22-11 31-21 31S24 51 24 29V16Z" fill="#fee68d" stroke="#493d52" stroke-width="3"/><path d="M25 22H13v9c0 12 8 17 17 17M65 22h12v9c0 12-8 17-17 17" stroke="#493d52" stroke-width="3" stroke-linejoin="round"/><path d="M45 59v12M30 75h30" stroke="#493d52" stroke-width="4" stroke-linecap="round"/><path d="m45 24 4 7 8 1-6 6 1 9-7-4-7 4 1-9-6-6 8-1 4-7Z" fill="#fff5c5"/></svg></div>
     <div class="player-title">${final ? 'Placar final' : 'Desenhos da rodada'}</div>
-    ${final ? `<div class="ranking-list">${scoresSorted.map((p, i) => `<div class="rank-row ${i === 0 ? 'rank-row-first' : ''}" style="--stagger:${i}"><span class="rank-player"><span class="rank-pos">${i + 1}º</span><span class="rank-name">${escapeHTML(p.name)}</span></span><strong class="rank-score">${p.score} pt</strong></div>`).join('')}</div>` : `<div class="gallery-grid gallery-count-${Math.min(10, rows.length)}">${rows.map((r, i) => `<div class="art-card" style="--stagger:${i}"><img src="${r.image}" alt="Desenho de ${escapeHTML(r.name)}"/><div class="art-info"><span class="art-name">${escapeHTML(r.name)}</span><span class="result-vote-totals"><span class="result-vote-like" title="Curtidas">${uiIcon('thumbUp')} ${r.likes}</span><span class="result-vote-dislike" title="Dislikes">${uiIcon('thumbDown')} ${r.dislikes}</span></span></div></div>`).join('')}</div>`}
+    ${final ? `<div class="ranking-list">${scoresSorted.map((p, i) => `<div class="rank-row ${i === 0 ? 'rank-row-first' : ''}" style="--stagger:${i}"><span class="rank-player"><span class="rank-pos">${i + 1}º</span><span class="rank-name">${escapeHTML(p.name)}</span></span><strong class="rank-score">${p.score} pt</strong></div>`).join('')}</div>` : `<div class="gallery-grid gallery-count-${Math.min(10, rows.length)}">${rows.map((r, i) => `<div class="art-card" style="--stagger:${i}"><button type="button" class="art-media" data-expand-index="${i}" aria-label="Ampliar desenho de ${escapeHTML(r.name)}"><img src="${r.image}" alt="Desenho de ${escapeHTML(r.name)}"/><span class="art-expand-badge" aria-hidden="true">${uiIcon('expand')}</span></button><div class="art-info"><span class="art-name">${escapeHTML(r.name)}</span><span class="result-vote-totals"><span class="result-vote-like" title="Curtidas">${uiIcon('thumbUp')} ${r.likes}</span><span class="result-vote-dislike" title="Dislikes">${uiIcon('thumbDown')} ${r.dislikes}</span></span></div></div>`).join('')}</div>`}
     <div class="bottom-actions results-actions"><button type="button" id="homeResult" class="btn btn-secondary">${uiIcon('home')}<span>Tela inicial</span></button>${state.isHost ? `<button type="button" id="nextRound" class="btn btn-primary">${uiIcon(final ? 'refresh' : 'play')}<span>${final ? 'Jogar novamente' : 'Próxima rodada'}</span></button>` : '<span class="status-note">Aguardando a próxima rodada.</span>'}</div>
   </section>`;
+  bindArtExpansion();
+  fitGalleryCards();
   $('#homeResult').onclick = () => leaveRoom(true);
   if (state.isHost) $('#nextRound').onclick = () => { if (final) { state.round = 0; state.scores = {}; roundUsedTopics.clear(); } startRound(); };
 }
@@ -1073,7 +1190,7 @@ function updateLiveUI() {
     const timer = $('#voteTimer'), fill = $('#voteTimerFill');
     if (timer) { timer.textContent = formatClock(remaining); timer.classList.toggle('low', remaining <= 10); }
     if (fill) fill.style.width = `${Math.max(0, 100 * (state.voteDeadline - Date.now()) / (VOTING_SECONDS * 1000))}%`;
-    if (remaining === 0) syncGalleryVoteUI();
+    if (remaining === 0) { syncGalleryVoteUI(); if ($('#artLightbox')?.open) updateLightboxUI(); }
     if (state.isHost && remaining === 0) finishVoting();
   }
   if (state.phase === 'lobby') {
@@ -1292,6 +1409,7 @@ function castVote(target, kind = 'like') {
   if (state.isHost) hostReceiveVote(state.selfId, nextReaction);
   else if (guestConnection?.open) guestConnection.send({ type: 'vote', target: nextReaction });
   syncGalleryVoteUI();
+  if ($('#artLightbox')?.open) updateLightboxUI();
   updateLiveUI();
 }
 
@@ -1359,6 +1477,30 @@ document.addEventListener('click', ev => {
 $('#brand').addEventListener('click', ev => ev.preventDefault());
 $('#homeButton').onclick = () => leaveRoom();
 
+window.addEventListener('resize', () => { if (state.phase === 'gallery' || state.phase === 'results') fitGalleryCards(); });
+
+/* Modal de desenho ampliado, com navegação por teclado e gestos. */
+const artLightbox = $('#artLightbox');
+if (artLightbox) {
+  $('#lightboxClose').onclick = closeLightbox;
+  $('#lightboxPrev').onclick = () => stepLightbox(-1);
+  $('#lightboxNext').onclick = () => stepLightbox(1);
+  artLightbox.addEventListener('close', () => { lightboxIndex = -1; });
+  artLightbox.addEventListener('click', event => {
+    if (event.target === artLightbox) closeLightbox();
+  });
+  let touchStart = null;
+  artLightbox.addEventListener('touchstart', event => {
+    if (event.touches.length === 1 && event.target.closest('.lightbox-stage')) touchStart = event.touches[0].clientX;
+  }, {passive:true});
+  artLightbox.addEventListener('touchend', event => {
+    if (touchStart === null || !event.changedTouches.length) return;
+    const dx = event.changedTouches[0].clientX - touchStart;
+    touchStart = null;
+    if (Math.abs(dx) > 55) stepLightbox(dx < 0 ? 1 : -1);
+  }, {passive:true});
+}
+
 /* Modal: Como jogar */
 const helpModal = $('#helpModal');
 $('#helpButton').onclick = () => helpModal.showModal();
@@ -1389,6 +1531,11 @@ window.addEventListener('resize', () => {
 });
 
 document.addEventListener('keydown', ev => {
+  if (artLightbox?.open) {
+    if (ev.key === 'ArrowLeft') { ev.preventDefault(); stepLightbox(-1); return; }
+    if (ev.key === 'ArrowRight') { ev.preventDefault(); stepLightbox(1); return; }
+    return;
+  }
   if (state.phase === 'drawing' && !localDrawn && (ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.target.closest('input,textarea,[contenteditable="true"]')) {
     const key = ev.key.toLowerCase();
     if (key === 'z' && ev.shiftKey) { ev.preventDefault(); redoDrawing(); return; }
