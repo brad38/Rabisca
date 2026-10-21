@@ -1985,3 +1985,12 @@ button.art-card:disabled { opacity: 1; cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .art-lightbox[open] { animation: none; }
 }
+
+/* Altura estável do visualizador: avaliação de outro jogador e desenho próprio
+   usam exatamente o mesmo espaço, mesmo quando não há botões de voto. */
+.lightbox-top { box-sizing: border-box; height: 37px; min-height: 37px; }
+.lightbox-foot { box-sizing: border-box; height: 52px; min-height: 52px; }
+@media (max-width: 650px) {
+  .lightbox-top { height: 52px; min-height: 52px; }
+  .lightbox-foot { height: 76px; min-height: 76px; }
+}
