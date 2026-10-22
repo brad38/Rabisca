@@ -1103,7 +1103,7 @@ function renderGallery() {
       const playerName = escapeHTML(a.player.name);
       return `<div class="art-card ${liked ? 'voted' : disliked ? 'disliked' : ''}" style="--stagger:${i}" data-player="${escapeHTML(a.id)}"><button type="button" class="art-media" data-expand-index="${i}" aria-label="Ampliar desenho de ${playerName}"><img src="${a.image}" alt="Desenho de ${playerName}"/><span class="art-expand-badge" aria-hidden="true">${uiIcon('expand')}</span></button><div class="art-info"><span class="art-name">${playerName}${owned ? ' <strong class="self-tag">você</strong>' : ''}</span>${owned ? '' : `<div class="vote-actions" role="group" aria-label="Avaliar desenho de ${playerName}"><button type="button" class="vote-action vote-like ${liked ? 'selected' : ''}" data-reaction="like" aria-pressed="${liked}" aria-label="Gostei do desenho de ${playerName}" title="Gostei">${uiIcon('thumbUp')}<span>Gostei</span></button><button type="button" class="vote-action vote-dislike ${disliked ? 'selected' : ''}" data-reaction="dislike" aria-pressed="${disliked}" aria-label="Não gostei do desenho de ${playerName}" title="Não gostei">${uiIcon('thumbDown')}<span>Dislike</span></button></div>`}</div></div>`;
     }).join('')}</div>
-    <div class="bottom-actions"><span class="status-note" id="voteHelp">${state.localVote ? 'Você pode trocar ou retirar sua avaliação até o tempo acabar.' : 'Escolha uma avaliação. É possível mudar ou cancelar.'}</span></div></section>`;
+  </section>`;
   $$('.gallery-grid .vote-action').forEach(btn => btn.onclick = () => castVote(btn.closest('.art-card')?.dataset.player, btn.dataset.reaction));
   bindArtExpansion();
   fitGalleryCards();
@@ -1127,10 +1127,6 @@ function syncGalleryVoteUI() {
       button.title = selected ? 'Retirar avaliação' : button.dataset.reaction === 'like' ? 'Gostei' : 'Não gostei';
     });
   });
-  const help = $('#voteHelp');
-  if (help) help.textContent = locked ? 'Votação encerrada.' : state.localVote
-    ? 'Você pode trocar ou retirar sua avaliação até o tempo acabar.'
-    : 'Escolha uma avaliação. É possível mudar ou cancelar.';
 }
 
 function rankResults() {
