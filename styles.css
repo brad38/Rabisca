@@ -2103,3 +2103,32 @@ button.art-card:disabled { opacity: 1; cursor: default; }
     width: 16px; height: 16px;
   }
 }
+
+/* Mobile: controles de navegação abaixo do quadro, sem ocupar largura lateral. */
+@media (max-width: 650px) {
+  .art-lightbox .lightbox-shell {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto 42px;
+    column-gap: 10px;
+    row-gap: 10px;
+  }
+  .art-lightbox .lightbox-card {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .art-lightbox .lightbox-prev {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: end;
+  }
+  .art-lightbox .lightbox-next {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+  .art-lightbox .lightbox-nav {
+    width: 52px;
+    height: 42px;
+    border-radius: 12px;
+  }
+}
